@@ -40,6 +40,10 @@ class Admin {
 		if ( $is_new_code_page || $is_existing_code_page ) {
 			add_filter( 'use_block_editor_for_post', '__return_false', 100 );
 			add_action( 'add_meta_boxes', [ $this, 'add_code_meta_boxes' ] );
+		
+			// Remove o editor de conteúdo principal e a imagem destacada.
+			remove_post_type_support( 'page', 'editor' );
+			remove_meta_box( 'postimagediv', 'page', 'side' );
 		}
 	}
 
