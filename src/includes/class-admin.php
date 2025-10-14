@@ -20,22 +20,33 @@ class Admin {
 	 * Inicializa os hooks da área de administração.
 	 */
 	public function init() {
+		add_action( 'admin_init', [ $this, 'setup_code_page_hooks' ] );
 		add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
 		add_action( 'load-post-new.php', [ $this, 'maybe_add_save_hook' ] );
-		add_filter( 'use_block_editor_for_post', [ $this, 'force_classic_editor' ], 10, 2 );
-		add_action( 'add_meta_boxes', [ $this, 'add_code_meta_boxes' ] );
 		add_action( 'save_post_page', [ $this, 'save_code_meta_boxes' ], 10, 2 );
 	}
 
 	/**
-	 * Adiciona os meta boxes para os campos de código se for uma página de código.
+	 * Verifica se estamos em uma página de código e adiciona os hooks necessários.
+	 */
+	public function setup_code_page_hooks() {
+		global $pagenow;
+
+		$is_new_code_page = ( $pagenow === 'post-new.php' && isset( $_GET['post_type'] ) && $_GET['post_type'] === 'page' && isset( $_GET['wcpc_new_code_page'] ) );
+
+		$post_id = $_GET['post'] ?? 0;
+		$is_existing_code_page = ( $pagenow === 'post.php' && $post_id && get_post_meta( $post_id, '_wcpc_is_code_page', true ) );
+
+		if ( $is_new_code_page || $is_existing_code_page ) {
+			add_filter( 'use_block_editor_for_post', '__return_false', 100 );
+			add_action( 'add_meta_boxes', [ $this, 'add_code_meta_boxes' ] );
+		}
+	}
+
+	/**
+	 * Adiciona os meta boxes para os campos de código.
 	 */
 	public function add_code_meta_boxes() {
-		global $post;
-		if ( ! $post || $post->post_type !== 'page' || ! get_post_meta( $post->ID, '_wcpc_is_code_page', true ) ) {
-			return;
-		}
-
 		add_meta_box(
 			'wcpc_html_meta_box',
 			__( 'HTML Completo', 'wp-code-page-creator' ),
@@ -138,21 +149,6 @@ class Admin {
 		update_post_meta( $post_id, self::META_KEY_COMPILED, $html );
 	}
 
-
-	/**
-	 * Força o uso do Editor Clássico se a página tiver a nossa flag.
-	 *
-	 * @param bool    $use_block_editor Se o editor de blocos deve ser usado.
-	 * @param WP_Post $post             O objeto do post.
-	 * @return bool
-	 */
-	public function force_classic_editor( $use_block_editor, $post ) {
-		if ( $post->post_type === 'page' && get_post_meta( $post->ID, '_wcpc_is_code_page', true ) ) {
-			return false;
-		}
-		return $use_block_editor;
-	}
-
 	/**
 	 * Adiciona o hook para salvar a flag apenas se a página for criada a partir do nosso menu.
 	 */
@@ -186,6 +182,9 @@ class Admin {
 
 		// Adiciona a flag.
 		update_post_meta( $post_id, '_wcpc_is_code_page', true );
+
+		// Define o template da página.
+		update_post_meta( $post_id, '_wp_page_template', 'src/template/template-final.php' );
 	}
 
 	/**

@@ -15,11 +15,16 @@ class Core {
 	 * Carrega os arquivos necessários e inicializa as classes.
 	 */
 	public function init() {
-		// Carrega a classe de administração.
+		// Carrega as classes.
 		require_once WCPC_PATH . 'src/includes/class-admin.php';
+		require_once WCPC_PATH . 'src/includes/class-templates.php';
 
 		// Inicializa a classe de administração.
 		$admin = new \WCPC\Admin\Admin();
 		$admin->init();
+
+		// Inicializa a classe de templates.
+		$templates = new \WCPC\Templates();
+		$templates->init();
 	}
 }
