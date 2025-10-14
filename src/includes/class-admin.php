@@ -14,6 +14,7 @@ class Admin {
     private const META_KEY_HTML = 'wcpc_html_completo';
 	private const META_KEY_CSS  = 'wcpc_css_adicional';
 	private const META_KEY_JS   = 'wcpc_js_adicional';
+	private const META_KEY_COMPILED = 'wcpc_html_montado';
 
 	/**
 	 * Inicializa os hooks da área de administração.
@@ -82,7 +83,7 @@ class Admin {
 	}
 
 	/**
-	 * Salva os dados dos meta boxes.
+	 * Salva os dados dos meta boxes e compila o HTML final.
 	 *
 	 * @param int     $post_id ID do post.
 	 * @param WP_Post $post    Objeto do post.
@@ -105,13 +106,36 @@ class Admin {
 			return;
 		}
 
+		// Salva os campos individuais
 		$meta_keys = [ self::META_KEY_HTML, self::META_KEY_CSS, self::META_KEY_JS ];
-
+		$post_data = [];
 		foreach ( $meta_keys as $meta_key ) {
 			if ( isset( $_POST[ $meta_key ] ) ) {
-				update_post_meta( $post_id, $meta_key, wp_unslash( $_POST[ $meta_key ] ) );
+				$sanitized_value = wp_unslash( $_POST[ $meta_key ] );
+				update_post_meta( $post_id, $meta_key, $sanitized_value );
+				$post_data[ $meta_key ] = $sanitized_value;
 			}
 		}
+
+		// Compila o HTML final
+		$html = $post_data[self::META_KEY_HTML] ?? '';
+		$css  = $post_data[self::META_KEY_CSS] ?? '';
+		$js   = $post_data[self::META_KEY_JS] ?? '';
+
+		// Adiciona CSS no final do <head>
+		if ( ! empty( trim( $css ) ) ) {
+			$css_block = "<style>{$css}</style>";
+			$html = str_replace( '</head>', $css_block . '</head>', $html );
+		}
+
+		// Adiciona JS no final do <body>
+		if ( ! empty( trim( $js ) ) ) {
+			$js_block = "<script>{$js}</script>";
+			$html = str_replace( '</body>', $js_block . '</body>', $html );
+		}
+
+		// Salva o HTML compilado
+		update_post_meta( $post_id, self::META_KEY_COMPILED, $html );
 	}
 
 
