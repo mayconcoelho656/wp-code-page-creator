@@ -18,6 +18,7 @@ class Core {
 		// Carrega as classes.
 		require_once WCPC_PATH . 'src/includes/class-admin.php';
 		require_once WCPC_PATH . 'src/includes/class-templates.php';
+		require_once WCPC_PATH . 'src/includes/class-header-footer.php';
 
 		// Inicializa a classe de administração.
 		$admin = new \WCPC\Admin\Admin();
@@ -26,5 +27,9 @@ class Core {
 		// Inicializa a classe de templates.
 		$templates = new \WCPC\Templates();
 		$templates->init();
+
+		// Inicializa a classe de Header/Footer.
+		$header_footer = new \WCPC\Admin\HeaderFooter();
+		$header_footer->init();
 	}
 }
