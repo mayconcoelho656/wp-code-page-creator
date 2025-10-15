@@ -18,7 +18,15 @@ $post_id = get_the_ID();
 // A constante META_KEY_COMPILED não está disponível aqui, então usamos a string diretamente.
 $compiled_html = get_post_meta( $post_id, 'wcpc_html_montado', true );
 
-// Exibe o HTML.
-// Não usamos a função the_content() ou qualquer outra função de template do WordPress.
-// Apenas exibimos o HTML bruto que foi compilado.
+// Aplica sistema de injeção próprio via filtros, substituindo os placeholders.
+$wcpc_head    = apply_filters( 'wcpc_head_content', '' );
+$wcpc_footer  = apply_filters( 'wcpc_footer_content', '' );
+
+$compiled_html = str_replace( '{{wcpc_head}}', $wcpc_head, $compiled_html );
+$compiled_html = str_replace( '{{wcpc_footer}}', $wcpc_footer, $compiled_html );
+
+// Processa os shortcodes no HTML compilado
+$compiled_html = do_shortcode( $compiled_html );
+
+// Exibe o HTML final após injeções.
 echo $compiled_html;
