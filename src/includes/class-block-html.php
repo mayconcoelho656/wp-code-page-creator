@@ -18,6 +18,7 @@ class BlockHtml {
 	const META_COMPILED = '_wcpc_block_compiled';
 	const META_FLAG = '_wcpc_is_block_html';
 	const META_ACTIVE = '_wcpc_block_active';
+	const META_MINIFY = '_wcpc_block_minify_enabled';
 
 	/**
 	 * Inicializa os hooks necessários.
@@ -30,6 +31,26 @@ class BlockHtml {
 		add_action( 'load-post-new.php', array( $this, 'maybe_add_save_hook' ) );
 		add_shortcode( 'wcpc_block', array( $this, 'render_shortcode' ) );
 		add_action( 'admin_init', array( $this, 'setup_block_html_hooks' ) );
+	}
+
+	/**
+	 * Renderiza o metabox para configurações de minificação.
+	 *
+	 * @param WP_Post $post O objeto do post.
+	 */
+	public function render_minify_meta_box( $post ) {
+		// Adiciona nonce para segurança
+		wp_nonce_field( 'wcpc_save_block_meta_box_data', 'wcpc_block_meta_box_nonce' );
+		
+		// Obtém o valor atual (padrão é desativo)
+		$minify_enabled = get_post_meta( $post->ID, self::META_MINIFY, true );
+		$minify_enabled = ( $minify_enabled === '' ) ? '0' : $minify_enabled; // Padrão desativo para novos blocks
+		
+		echo '<p><label>';
+		echo '<input type="checkbox" name="wcpc_block_minify" value="1" ' . checked( $minify_enabled, '1', false ) . ' />';
+		echo ' <strong>Ativar Minificação</strong>';
+		echo '</label></p>';
+		echo '<p><small>Remove quebras de linha, espaços extras e comentários do HTML, CSS e JS compilados.</small></p>';
 	}
 
 	/**
@@ -167,6 +188,16 @@ class BlockHtml {
 			'wcpc_block_html',
 			'side',
 			'high'
+		);
+
+		// Adiciona metabox para Minificação
+		add_meta_box(
+			'wcpc_block_minify_meta_box',
+			__( 'Minificação Completa', 'wp-code-page-creator' ),
+			array( $this, 'render_minify_meta_box' ),
+			'wcpc_block_html',
+			'side',
+			'default'
 		);
 	}
 
@@ -320,6 +351,10 @@ class BlockHtml {
 		$is_active = isset( $_POST['wcpc_block_active'] ) ? '1' : '0';
 		update_post_meta( $post_id, self::META_ACTIVE, $is_active );
 
+		// Salva o status de minificação
+		$minify_enabled = isset( $_POST['wcpc_block_minify'] ) ? '1' : '0';
+		update_post_meta( $post_id, self::META_MINIFY, $minify_enabled );
+
 		// Compila o HTML final no formato solicitado
 		$html = $post_data[self::META_HTML] ?? '';
 		$css  = $post_data[self::META_CSS] ?? '';
@@ -327,22 +362,38 @@ class BlockHtml {
 
 		$compiled_content = '';
 
-		// Adiciona CSS minificado
+		// Verifica se a minificação está habilitada
+		$minify_enabled = get_post_meta( $post_id, self::META_MINIFY, true );
+		$minify_enabled = ( $minify_enabled === '' ) ? '0' : $minify_enabled; // Padrão desativo
+
+		// Adiciona CSS (minificado ou não)
 		if ( ! empty( trim( $css ) ) ) {
-			$minified_css = $this->minify_css( $css );
-			$compiled_content .= "<style>{$minified_css}</style>\n\n";
+			if ( $minify_enabled === '1' ) {
+				$processed_css = $this->minify_css( $css );
+				$compiled_content .= "<style>{$processed_css}</style>";
+			} else {
+				$compiled_content .= "<style>\n{$css}\n</style>\n\n";
+			}
 		}
 
-		// Adiciona HTML diretamente (minificado)
+		// Adiciona HTML (minificado ou não)
 		if ( ! empty( trim( $html ) ) ) {
-			$minified_html = $this->minify_html( $html );
-			$compiled_content .= "{$minified_html}\n\n";
+			if ( $minify_enabled === '1' ) {
+				$processed_html = $this->minify_html( $html );
+				$compiled_content .= $processed_html;
+			} else {
+				$compiled_content .= "{$html}\n\n";
+			}
 		}
 
-		// Adiciona JS minificado
+		// Adiciona JS (minificado ou não)
 		if ( ! empty( trim( $js ) ) ) {
-			$minified_js = $this->minify_js( $js );
-			$compiled_content .= "<script>{$minified_js}</script>";
+			if ( $minify_enabled === '1' ) {
+				$processed_js = $this->minify_js( $js );
+				$compiled_content .= "<script>{$processed_js}</script>";
+			} else {
+				$compiled_content .= "<script>\n{$js}\n</script>";
+			}
 		}
 
 		// Salva o conteúdo compilado

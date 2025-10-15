@@ -10,6 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 function wcpc_get_priority( $plugin_key ) {
     static $map = [
+        'admin-bar'    => 5,  // Admin-bar tem prioridade alta
         'block-html'   => 10,
         'default' => 12,
         'maintenance' => 16,
@@ -45,3 +46,49 @@ function wcpc_add_footer( $plugin_key, $payload ) {
         return $content . $addition;
     }, $priority );
 }
+
+/**
+ * Inicializa a admin-bar do WordPress nas páginas WCPC.
+ * Adiciona automaticamente os estilos e scripts necessários quando o usuário está logado.
+ */
+function wcpc_init_admin_bar() {
+    // Verifica se o usuário está logado e se a admin-bar está habilitada
+    if ( ! is_user_logged_in() || ! is_admin_bar_showing() ) {
+        return;
+    }
+
+    // Adiciona os estilos da admin-bar no head
+    wcpc_add_head( 'admin-bar', function() {
+        ob_start();
+        
+        // Carrega os estilos necessários da admin-bar
+        wp_enqueue_style( 'admin-bar' );
+        wp_print_styles( 'admin-bar' );
+        
+        // Adiciona CSS personalizado para ajustar o body quando a admin-bar está presente (minificado)
+        echo '<style type="text/css">html{margin-top:32px!important;}*html body{margin-top:32px!important;}@media screen and (max-width:782px){html{margin-top:46px!important;}*html body{margin-top:46px!important;}}</style>';
+        
+        $content = ob_get_clean();
+        // Minifica o conteúdo removendo quebras de linha e espaços extras
+        return preg_replace('/\s+/', ' ', trim($content));
+    });
+
+    // Adiciona a admin-bar e scripts no footer
+    wcpc_add_footer( 'admin-bar', function() {
+        ob_start();
+        
+        // Renderiza a admin-bar
+        wp_admin_bar_render();
+        
+        // Carrega os scripts necessários da admin-bar
+        wp_enqueue_script( 'admin-bar' );
+        wp_print_scripts( 'admin-bar' );
+        
+        $content = ob_get_clean();
+        // Minifica o conteúdo removendo quebras de linha e espaços extras
+        return preg_replace('/\s+/', ' ', trim($content));
+    });
+}
+
+// Inicializa a admin-bar quando o WordPress estiver carregado
+add_action( 'wp_loaded', 'wcpc_init_admin_bar' );

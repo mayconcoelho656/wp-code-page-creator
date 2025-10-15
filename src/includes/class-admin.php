@@ -15,6 +15,67 @@ class Admin {
 	private const META_KEY_CSS  = 'wcpc_css_adicional';
 	private const META_KEY_JS   = 'wcpc_js_adicional';
 	private const META_KEY_COMPILED = 'wcpc_html_montado';
+	private const META_MINIFY = '_wcpc_minify_enabled';
+
+	/**
+	 * Minifica o HTML removendo quebras de linha, espaços extras e comentários.
+	 *
+	 * @param string $html O código HTML a ser minificado.
+	 * @return string O HTML minificado.
+	 */
+	private function minify_html( $html ) {
+		// Remove comentários HTML (<!-- ... -->)
+		$html = preg_replace( '/<!--.*?-->/s', '', $html );
+		
+		// Remove espaços entre tags
+		$html = preg_replace( '/>\s+</', '><', $html );
+		
+		// Remove espaços no início e fim de cada linha
+		$html = preg_replace( '/^\s+|\s+$/m', '', $html );
+		
+		// Remove linhas vazias
+		$html = preg_replace( '/\n\s*\n/', "\n", $html );
+		
+		// Converte múltiplos espaços em um único espaço
+		$html = preg_replace( '/\s+/', ' ', $html );
+		
+		// Remove todas as quebras de linha para deixar em uma única linha
+		$html = preg_replace( '/\n/', '', $html );
+		
+		// Remove espaços no início e fim
+		$html = trim( $html );
+		
+		return $html;
+	}
+
+	/**
+	 * Renderiza o meta box para configurações de minificação.
+	 *
+	 * @param WP_Post $post O objeto do post.
+	 */
+	public function render_minify_meta_box( $post ) {
+		wp_nonce_field( 'wcpc_save_minify_data', 'wcpc_minify_nonce' );
+
+		// Busca o valor salvo (padrão é desativado)
+		$minify_enabled = get_post_meta( $post->ID, self::META_MINIFY, true );
+		
+		// Se não existe valor salvo, define como desativado por padrão
+		if ( $minify_enabled === '' ) {
+			$minify_enabled = '0';
+		}
+
+		?>
+		<div style="margin-bottom: 15px;">
+			<label>
+				<input type="checkbox" name="<?php echo esc_attr( self::META_MINIFY ); ?>" value="1" <?php checked( $minify_enabled, '1' ); ?> />
+				<?php _e( 'Ativar Minificação Completa', 'wp-code-page-creator' ); ?>
+			</label>
+			<p class="description" style="margin-top: 8px; font-size: 12px; color: #666;">
+				<?php _e( 'Remove quebras de linha, espaços extras e comentários do HTML final. Quando desativado, mantém a formatação original com quebras de linha no CSS e JS.', 'wp-code-page-creator' ); ?>
+			</p>
+		</div>
+		<?php
+	}
 
 	/**
 	 * Busca e compila o header ou footer selecionado para uma página.
@@ -145,10 +206,10 @@ class Admin {
 		if ( $is_new_code_page || $is_existing_code_page ) {
 			add_filter( 'use_block_editor_for_post', '__return_false', 100 );
 			add_action( 'add_meta_boxes', [ $this, 'add_code_meta_boxes' ] );
+			add_action( 'add_meta_boxes', [ $this, 'remove_featured_image_metabox' ] );
 		
-			// Remove o editor de conteúdo principal e a imagem destacada.
+			// Remove o editor de conteúdo principal.
 			remove_post_type_support( 'page', 'editor' );
-			remove_meta_box( 'postimagediv', 'page', 'side' );
 		}
 	}
 
@@ -194,6 +255,22 @@ class Admin {
 			'side',
 			'default'
 		);
+
+		add_meta_box(
+			'wcpc_minify_meta_box',
+			__( 'Configurações de Minificação', 'wp-code-page-creator' ),
+			[ $this, 'render_minify_meta_box' ],
+			'page',
+			'side',
+			'default'
+		);
+	}
+
+	/**
+	 * Remove o metabox da featured image para páginas HTML.
+	 */
+	public function remove_featured_image_metabox() {
+		remove_meta_box( 'postimagediv', 'page', 'side' );
 	}
 
 	/**
@@ -248,6 +325,12 @@ class Admin {
 			update_post_meta( $post_id, '_wcpc_selected_footer', $selected_footer );
 		}
 
+		// Salva os dados de Minificação se o nonce estiver presente
+		if ( isset( $_POST['wcpc_minify_nonce'] ) && wp_verify_nonce( $_POST['wcpc_minify_nonce'], 'wcpc_save_minify_data' ) ) {
+			$minify_enabled = isset( $_POST[ self::META_MINIFY ] ) ? '1' : '0';
+			update_post_meta( $post_id, self::META_MINIFY, $minify_enabled );
+		}
+
 		// Salva os campos individuais
 		$meta_keys = [ self::META_KEY_HTML, self::META_KEY_CSS, self::META_KEY_JS ];
 		$post_data = [];
@@ -265,11 +348,22 @@ class Admin {
 		$js   = $post_data[self::META_KEY_JS] ?? '';
 
 		// Adiciona {{wcpc_head}} e CSS no final do <head>
-		$head_content = "\n{{wcpc_head}}\n";
+		$head_content = "{{wcpc_head}}";
 		if ( ! empty( trim( $css ) ) ) {
-			// Minifica o CSS removendo quebras de linha, espaços extras e comentários
-			$minified_css = $this->minify_css( $css );
-			$head_content .= "\n<style>{$minified_css}</style>\n\n";
+			// Verifica se a minificação está ativada
+			$minify_enabled = get_post_meta( $post_id, self::META_MINIFY, true );
+			if ( $minify_enabled === '' ) {
+				$minify_enabled = '0'; // Padrão desativado
+			}
+			
+			if ( $minify_enabled === '1' ) {
+				// Minifica o CSS removendo quebras de linha, espaços extras e comentários
+				$minified_css = $this->minify_css( $css );
+				$head_content .= "<style>{$minified_css}</style>";
+			} else {
+				// Mantém formatação original com quebras de linha
+				$head_content .= "\n<style>\n{$css}\n</style>\n";
+			}
 		}
 		$html = str_replace( '</head>', $head_content . '</head>', $html );
 
@@ -278,20 +372,31 @@ class Admin {
 		$compiled_footer = $this->get_compiled_header_footer( $post_id, 'footer' );
 
 		// Adiciona o header compilado no início do <body>
-		$html = str_replace( '<body>', "<body>\n\n{$compiled_header}\n", $html );
+		$html = str_replace( '<body>', "<body>{$compiled_header}", $html );
 
 		// Adiciona o footer compilado, JS e {{wcpc_footer}} no final do <body>
-		$footer_content = "\n{$compiled_footer}\n";
+		$footer_content = "{$compiled_footer}";
 		if ( ! empty( trim( $js ) ) ) {
-			// Minifica o JS removendo quebras de linha, espaços extras e comentários
-			$minified_js = $this->minify_js( $js );
-			$footer_content .= "\n<script>{$minified_js}</script>\n";
+			// Verifica se a minificação está ativada (reutiliza a variável já definida)
+			if ( $minify_enabled === '1' ) {
+				// Minifica o JS removendo quebras de linha, espaços extras e comentários
+				$minified_js = $this->minify_js( $js );
+				$footer_content .= "<script>{$minified_js}</script>";
+			} else {
+				// Mantém formatação original com quebras de linha
+				$footer_content .= "\n<script>\n{$js}\n</script>\n";
+			}
 		}
-		$footer_content .= "\n{{wcpc_footer}}\n\n";
+		$footer_content .= "{{wcpc_footer}}";
 		$html = str_replace( '</body>', $footer_content . '</body>', $html );
 
-		// Salva o HTML compilado
-		update_post_meta( $post_id, self::META_KEY_COMPILED, $html );
+		// Salva o HTML compilado (aplicando minificação condicionalmente)
+		if ( $minify_enabled === '1' ) {
+			$final_html = $this->minify_html( $html );
+		} else {
+			$final_html = $html;
+		}
+		update_post_meta( $post_id, self::META_KEY_COMPILED, $final_html );
 	}
 
 	/**
